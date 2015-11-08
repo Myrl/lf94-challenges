@@ -2,13 +2,13 @@
 {-# LANGUAGE LambdaCase #-}
 module HashMap where
 
-import Data.String (IsString)
 import qualified Data.ByteString as B
+import Data.Monoid.Null
 
 type Bucket k a = [(k, a)]
 type HashMap k a = [(Int, Bucket k a)]
 
-class Hashable a where
+class Eq a => Hashable a where
     hash :: a -> Int
 
 instance Hashable B.ByteString where
@@ -18,18 +18,18 @@ instance Hashable B.ByteString where
 fromMaybe :: Monoid m => Maybe m -> m
 fromMaybe = maybe mempty id
 
-toMaybe :: (Ord m, Monoid m) => m -> Maybe m
+toMaybe :: MonoidNull m => m -> Maybe m
 toMaybe xs
-    | mempty == xs = Nothing
+    | Data.Monoid.Null.null xs = Nothing
     | otherwise = Just xs
 
-(!) :: (Hashable s, Ord s, IsString s) => HashMap s a -> s -> a
+(!) :: (Hashable s) => HashMap s a -> s -> a
 xs ! k = get (get xs (hash k)) k
 
-insert :: (Hashable s, Ord s, IsString s, Ord a) => s -> a -> HashMap s a -> HashMap s a
-insert k x xs = update' (insert' k x . fromMaybe) (hash k) xs
+insert :: (Hashable s) => s -> a -> HashMap s a -> HashMap s a
+insert k x = update' (insert' k x . fromMaybe) (hash k)
 
-delete :: (Hashable s, Ord s, IsString s, Ord a) => s -> HashMap s a -> HashMap s a
+delete :: (Hashable s) => s -> HashMap s a -> HashMap s a
 delete k xs = update (toMaybe . delete' k) (hash k) xs
 
 get :: Eq k => [(k, a)] -> k -> a
