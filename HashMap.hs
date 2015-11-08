@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 module HashMap where
 
-import qualified Data.Map as Map
-import qualified Data.IntMap as IntMap
 import Data.String (IsString)
 import qualified Data.ByteString as B
 
-type HashMap k a = IntMap.IntMap (Map.Map k a)
+type Bucket k a = [(k, a)]
+type HashMap k a = [(Int, Bucket k a)]
 
 class Hashable a where
     hash :: a -> Int
@@ -24,10 +24,41 @@ toMaybe xs
     | otherwise = Just xs
 
 (!) :: (Hashable s, Ord s, IsString s) => HashMap s a -> s -> a
-xs ! k = (xs IntMap.! (hash k)) Map.! k
+xs ! k = get (get xs (hash k)) k
 
 insert :: (Hashable s, Ord s, IsString s, Ord a) => s -> a -> HashMap s a -> HashMap s a
-insert k x xs = IntMap.alter (toMaybe . Map.insert k x . fromMaybe) (hash k) xs
+insert k x xs = update' (insert' k x . fromMaybe) (hash k) xs
 
 delete :: (Hashable s, Ord s, IsString s, Ord a) => s -> HashMap s a -> HashMap s a
-delete k xs = IntMap.update (toMaybe . Map.delete k) (hash k) xs
+delete k xs = update (toMaybe . delete' k) (hash k) xs
+
+get :: Eq k => [(k, a)] -> k -> a
+get xs k = snd . head . dropWhile (\(k', _) -> k' /= k) $ xs
+
+update' :: Eq k => (Maybe a -> a) -> k -> [(k, a)] -> [(k, a)]
+update' f k [] = [(k, f Nothing)]
+update' f k ((k', x):xs)
+    | k == k' = (k', f (Just x)):xs
+    | otherwise = (k', x):update' f k xs
+
+update :: Eq k => (a -> Maybe a) -> k -> [(k, a)] -> [(k, a)]
+update _ _ [] = []
+update f k ((k', x):xs)
+    | k == k' = case f x of
+                  Just x' -> (k', x'):xs
+                  Nothing -> xs
+    | otherwise = (k', x):update f k xs
+
+alter :: Eq k => (Maybe a -> Maybe a) -> k -> [(k, a)] -> [(k, a)]
+alter f k [] = maybe [] (\x' -> [(k, x')]) $ f Nothing
+alter f k ((k', x):xs)
+    | k == k' = maybe xs (\x' -> (k, x'):xs) $ f $ Just x
+    | otherwise = (k', x):alter f k xs
+
+insert' :: Eq k => k -> a -> [(k, a)] -> [(k, a)]
+insert' k x xs = alter (\case 
+                         Nothing -> Just x
+                         Just x' -> Just x') k xs
+
+delete' :: Eq k => k -> [(k, a)] -> [(k, a)]
+delete' = alter (const Nothing)
